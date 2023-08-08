@@ -13,6 +13,7 @@ def obtain_user_confirmation(prompt: str):
 
 def main():
     # Initialize the firmware list
+    print("Loading firmware list from BrewFlasher.com...")
     firmware_list = brewflasher_com_integration.FirmwareList()
     if not firmware_list.load_from_website():
         print("Failed to load data from the website.")

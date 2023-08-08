@@ -1,9 +1,4 @@
 import serial.tools.list_ports
-import os
-
-import pickle
-
-DEVICE_CACHE_FILENAME = 'device.cache'
 
 known_devices = {
     'arduino': [
@@ -42,6 +37,8 @@ known_devices = {
     ]
 }
 
+DEVICE_CACHE = []
+
 def check_known_devices(family, pid, vid, return_bool=False):
     unknown_device = {'name': "Unknown", 'generic': True}
 
@@ -65,51 +62,36 @@ def check_known_devices(family, pid, vid, return_bool=False):
     else:
         return unknown_device
 
-
-def write_list_to_file(devices, filename):
-    with open(filename, 'wb') as fp:
-        pickle.dump(devices, fp)
-
-
-def read_list_from_file(filename):
-    with open(filename, 'rb') as fp:
-        devices = pickle.load(fp)
-    return devices
-
-
 def cache_current_devices():
+    global DEVICE_CACHE
     ports = list(serial.tools.list_ports.comports())
-
-    current_devices=[]
-    for p in ports:
-        current_devices.append(p.device)
-
-    write_list_to_file(current_devices, DEVICE_CACHE_FILENAME)
-
-    return current_devices
-
+    DEVICE_CACHE = [p.device for p in ports]
+    return DEVICE_CACHE
 
 def compare_current_devices_against_cache(family="arduino"):
     ports = list(serial.tools.list_ports.comports())
 
     # We read current_devices the same as above
-    current_devices=[]
-    for p in ports:
-        current_devices.append(p.device)
-
+    current_devices = [p.device for p in ports]
     # We read in existing_devices from the device.cache file we (presumably) created earlier
-    existing_devices = read_list_from_file(DEVICE_CACHE_FILENAME)
-
+    existing_devices = DEVICE_CACHE
     # New devices is any device that shows now (but didn't show before)
     new_devices = list(set(current_devices) - set(existing_devices))
 
     # Once we have current_devices, existing_devices, and new_devices, let's enrich new_devices
     new_devices_enriched = []
+
     for p in ports:
         if p.device in new_devices:
             known_device = check_known_devices(family, p.pid, p.vid)
-            enriched_device = {'vid': p.vid, 'pid': p.pid, 'device': p.device, 'description': p.description,
-                               'known_name': known_device['name'], 'known_generic': known_device['generic']}
+            enriched_device = {
+                'vid': p.vid,
+                'pid': p.pid,
+                'device': p.device,
+                'description': p.description,
+                'known_name': known_device['name'],
+                'known_generic': known_device['generic']
+            }
             new_devices_enriched.append(enriched_device)
 
     # And now, let's return all four lists for good measure. We can discard the ones we don't want.
@@ -118,7 +100,4 @@ def compare_current_devices_against_cache(family="arduino"):
 
 # The following was used for testing during development
 if __name__ == "__main__":
-    # cache_current_devices()
     existing_devices, current_devices, new_devices, new_devices_enriched = compare_current_devices_against_cache("arduino")
-
-    pass
