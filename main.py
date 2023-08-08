@@ -1,6 +1,7 @@
 import sys
 import brewflasher_com_integration
 import serial_integration
+import click
 
 
 def obtain_user_confirmation(prompt: str):
@@ -11,7 +12,10 @@ def obtain_user_confirmation(prompt: str):
         sys.exit(0)
 
 
-def main():
+@click.command()
+@click.option('--firmware', '-f', default=None, help='Firmware ID to skip firmware selection.')
+@click.option('--serial-port', '-p', default=None, help='Serial port to skip device detection.')
+def main(firmware, serial_port):
     # Initialize the firmware list
     print("Loading firmware list from BrewFlasher.com...")
     firmware_list = brewflasher_com_integration.FirmwareList()
@@ -19,6 +23,44 @@ def main():
         print("Failed to load data from the website.")
         return
 
+    if firmware is None:
+        # If the user didn't specify a firmware, prompt them to select one
+        selected_firmware, device_family = select_firmware(firmware_list)
+    else:
+        # If the user specified a firmware, find it in the list and set both selected_firmware and device_family
+        selected_firmware = None
+        device_family = None
+        for project_id in firmware_list.Projects:
+            for family_id in firmware_list.Projects[project_id].device_families:
+                for this_firmware in firmware_list.Projects[project_id].device_families[family_id].firmware:
+                    if this_firmware.id == int(firmware):
+                        selected_firmware = this_firmware
+                        device_family = firmware_list.Projects[project_id].device_families[family_id]
+
+        if selected_firmware is None or device_family is None:
+            print("Failed to find selected firmware. Exiting.")
+            sys.exit(1)
+
+    # Confirm firmware selection
+    print(f"\nYou've selected the following firmware:\n{selected_firmware}\n")
+    obtain_user_confirmation("Do you want to flash this firmware?")
+
+    # Device Detection Steps
+    if serial_port is None:
+        selected_device = detect_new_devices()
+    else:
+        selected_device = serial_port
+
+    if selected_device:
+        print(f"You've selected device: {selected_device}")
+    else:
+        print("No device selected. Exiting.")
+        sys.exit(0)
+
+    obtain_user_confirmation(f"Do you want to flash device {selected_device} with {selected_firmware}?")
+
+
+def select_firmware(firmware_list):
     # Prompt user to select a Project
     projects = firmware_list.get_project_list()
     print("\nSelect a Project:")
@@ -37,6 +79,8 @@ def main():
     family_choice = int(input("\nEnter the number of your choice: ")) - 1
     selected_family_id = firmware_list.get_device_family_id(selected_project_id, device_families[family_choice])
 
+    selected_family = firmware_list.DeviceFamilies[selected_family_id]
+
     # Prompt user to select a Firmware
     firmwares = firmware_list.get_firmware_list(selected_project_id, selected_family_id)
     print("\nSelect a Firmware:")
@@ -46,19 +90,7 @@ def main():
     firmware_choice = int(input("\nEnter the number of your choice: ")) - 1
     selected_firmware = firmware_list.get_firmware(selected_project_id, selected_family_id, firmwares[firmware_choice])
 
-    # Confirm firmware selection
-    print(f"\nYou've selected the following firmware:\n{selected_firmware}\n")
-    obtain_user_confirmation("Do you want to flash this firmware?")
-
-    # Device Detection Steps
-    selected_device = detect_new_devices()
-    if selected_device:
-        print(f"You've selected device: {selected_device}")
-    else:
-        print("No device selected. Exiting.")
-        sys.exit(0)
-
-    obtain_user_confirmation(f"Do you want to flash device {selected_device} with {selected_firmware}?")
+    return selected_firmware, selected_family
 
 
 def detect_new_devices():
