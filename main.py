@@ -8,7 +8,6 @@ from serial import SerialException
 from brewflasher_com_integration import FirmwareList, Firmware, DeviceFamily, Project
 import serial_integration
 import click
-import subprocess
 
 __version__ = "0.0.1"
 __supported_baud_rates__ = [9600, 57600, 74880, 115200, 230400, 460800, 921600]
@@ -23,9 +22,12 @@ def obtain_user_confirmation(prompt: str):
 
 
 @click.command()
-@click.option('--firmware', '-f', default=None, help='Firmware ID to skip firmware selection.')
-@click.option('--serial-port', '-p', default=None, help='Serial port to skip device detection.')
-def main(firmware, serial_port):
+@click.option('--firmware', '-f', default=None, help='Firmware ID to skip firmware selection')
+@click.option('--serial-port', '-p', default=None, help='Serial port to skip device detection')
+@click.option('--baud', '-b', default=None, help='Baud rate to flash at',
+              type=click.Choice([str(x) for x in __supported_baud_rates__]))
+@click.option('--erase-flash', '-e', is_flag=True, default=None, help='Erase flash memory before installing firmware')
+def main(firmware, serial_port, baud, erase_flash):
     # Initialize the firmware list
     print("Loading firmware list from BrewFlasher.com...")
     firmware_list = FirmwareList()
@@ -51,9 +53,40 @@ def main(firmware, serial_port):
             print("Failed to find selected firmware. Exiting.")
             sys.exit(1)
 
+    if device_family.flash_method == "avrdude":
+        if not check_for_avrdude():
+            print("avrdude is not on the path, which means that BrewFlasher cannot flash Arduino-based chips.")
+            # TODO - Add OS-specific instructions for resolving this here
+            print("Please check the avrdude documentation (https://github.com/avrdudes/avrdude/) for your operating system and install it.")
+            print("Exiting.")
+            sys.exit(1)
+
+    if baud is None:
+        selected_baud_rate = select_baud_rate()
+    else:
+        selected_baud_rate = baud
+
+    # If the user set whether to erase the flash on the command line, respect his/her selection
+    if erase_flash is None:
+        confirmation = input(f"Do you want to erase the flash on the device completely before writing the firmware (y/n): ").strip().lower()
+
+        if confirmation not in ["y", "yes"]:
+            erase_flash_flag = False
+            print("Flash will not be erased before writing firmware")
+        else:
+            erase_flash_flag = True
+            print("Flash WILL be erased before writing firmware")
+    else:
+        erase_flash_flag = erase_flash
+
+    if erase_flash_flag:  # Set the text for the confirmation prompt below
+        erase_flash_text = "erasing flash first"
+    else:
+        erase_flash_text = "not erasing flash first"
+
     # Confirm firmware selection
     print(f"\nYou've selected the following firmware:\n{selected_firmware}\n")
-    obtain_user_confirmation("Do you want to flash this firmware?")
+    obtain_user_confirmation(f"Do you want to flash this firmware at {selected_baud_rate}bps, {erase_flash_text}?")
 
     # Device Detection Steps
     if serial_port is None:
@@ -101,6 +134,45 @@ def select_firmware(firmware_list):
     selected_firmware = firmware_list.get_firmware(selected_project_id, selected_family_id, firmwares[firmware_choice])
 
     return selected_firmware, selected_family
+
+
+def check_for_avrdude() -> bool:
+    from shutil import which
+
+    if which("avrdude") is not None:
+        print("avrdude found on the path - Arduino installations can proceed.")
+        return True
+    else:
+        print("avrdude not found on the path - Cannot flash Arduino firmware!")
+        return False
+
+    # # Test if avrdude is available. If not, the user will need to install it.
+    # try:
+    #     rettext = subprocess.check_output(["dpkg", "-s", "avrdude"]).decode(encoding='cp437')
+    #     install_check = rettext.find("installed")
+    #
+    #     if install_check == -1:
+    #         # The package status isn't 'installed'
+    #         print("Warning - Package 'avrdude' not installed. Arduino installations will fail! Click <a href=\"http://www.fermentrack.com/help/avrdude/\">here</a> to learn how to resolve this issue.")
+    #         return False
+    #     else:
+    #         return True
+    # except:
+    #     print("Unable to check for installed 'avrdude' package - Arduino installations may fail!")
+    #     return False
+
+
+def select_baud_rate() -> int:
+    # Prompt user to select a baud rate
+    print("\nSelect baud rate (speed) to flash at. Recommended to try 460800 first, and 115200 if that fails:")
+    for idx, rate in enumerate(__supported_baud_rates__, 1):
+        print(f"{idx}. {rate}")
+
+    baud_rate_choice = int(input("\nEnter the number of your choice: ")) - 1
+    selected_baud_rate = __supported_baud_rates__[baud_rate_choice]
+    print(f"Selected: {selected_baud_rate}")
+
+    return selected_baud_rate
 
 
 def detect_new_devices():
