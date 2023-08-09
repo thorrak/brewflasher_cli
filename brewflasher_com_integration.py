@@ -208,7 +208,7 @@ class FirmwareList:
             return True
         return False  # We didn't get data back from Brewflasher.com, or there was an error
 
-    def load_families_from_website(self) -> bool:
+    def load_families_from_website(self, load_esptool_only:bool = True) -> bool:
         try:
             url = BREWFLASHER_COM_URL + "/api/firmware_family_list/"
             response = requests.get(url)
@@ -229,11 +229,12 @@ class FirmwareList:
                                               checksum_bootloader=row['checksum_bootloader'],
                                               checksum_otadata=row['checksum_otadata'],
                                               use_1200_bps_touch=row['use_1200_bps_touch'])
-                    if new_family.flash_method == "esptool":  # Only save families that use esptool
-                        self.DeviceFamilies[new_family.id] = copy.deepcopy(new_family)
-                        self.valid_family_ids.append(new_family.id)
-                        for this_project in self.Projects:
-                            self.Projects[this_project].device_families[new_family.id] = copy.deepcopy(new_family)
+                    if new_family.flash_method != "esptool" and load_esptool_only:
+                        continue  # Only save families that use esptool if this is BrewFlasher Desktop
+                    self.DeviceFamilies[new_family.id] = copy.deepcopy(new_family)
+                    self.valid_family_ids.append(new_family.id)
+                    for this_project in self.Projects:
+                        self.Projects[this_project].device_families[new_family.id] = copy.deepcopy(new_family)
                 except:
                     print("\nUnable to load device families from BrewFlasher.com.")
                     print("Please check your internet connection and try launching BrewFlasher again.\nIf you continue "
@@ -300,9 +301,9 @@ class FirmwareList:
                 del self.Projects[this_project_id]
 
     # We need to load everything in a specific order for it to work
-    def load_from_website(self) -> bool:
+    def load_from_website(self, load_esptool_only:bool = True) -> bool:
         if self.load_projects_from_website():
-            if self.load_families_from_website():
+            if self.load_families_from_website(load_esptool_only):
                 if self.load_firmware_from_website():
                     self.cleanse_projects()
                     return True

@@ -1,7 +1,17 @@
 import sys
-import brewflasher_com_integration
+from time import sleep
+
+import esptool
+import serial
+from serial import SerialException
+
+from brewflasher_com_integration import FirmwareList, Firmware, DeviceFamily, Project
 import serial_integration
 import click
+import subprocess
+
+__version__ = "0.0.1"
+__supported_baud_rates__ = [9600, 57600, 74880, 115200, 230400, 460800, 921600]
 
 
 def obtain_user_confirmation(prompt: str):
@@ -18,8 +28,8 @@ def obtain_user_confirmation(prompt: str):
 def main(firmware, serial_port):
     # Initialize the firmware list
     print("Loading firmware list from BrewFlasher.com...")
-    firmware_list = brewflasher_com_integration.FirmwareList()
-    if not firmware_list.load_from_website():
+    firmware_list = FirmwareList()
+    if not firmware_list.load_from_website(load_esptool_only=False):
         print("Failed to load data from the website.")
         return
 

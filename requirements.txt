@@ -1,4 +1,5 @@
 requests==2.31.0
 pyserial==3.5
 click==8.1.6
+esptool==4.6.2
 
