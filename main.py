@@ -15,7 +15,6 @@ __supported_baud_rates__ = [9600, 57600, 74880, 115200, 230400, 460800, 921600]
 
 def obtain_user_confirmation(prompt: str):
     confirmation = input(f"{prompt} (y/n): ").strip().lower()
-
     if confirmation not in ["y", "yes"]:
         print("Acknowledged. Exiting.")
         sys.exit(0)
@@ -101,6 +100,17 @@ def main(firmware, serial_port, baud, erase_flash):
         sys.exit(0)
 
     obtain_user_confirmation(f"Do you want to flash device {selected_device} with {selected_firmware}?")
+
+    if device_family.flash_method == "esptool":
+        flash_firmware_using_esptool(selected_firmware, device_family, selected_baud_rate, selected_device, erase_flash_flag)
+        print("Done! Exiting.")
+        sys.exit(0)
+    elif device_family.flash_method == "avrdude":
+        print("TODO - Flash with avrdude here")
+        sys.exit(1)  # TODO - Change to 0 when implemented
+    else:
+        print(f"Unknown flash method {device_family.flash_method}. Exiting.")
+        sys.exit(1)
 
 
 def select_firmware(firmware_list):
@@ -199,6 +209,163 @@ def detect_new_devices():
 
         device_choice = int(input("\nSelect a device by its number: ")) - 1
         return new_devices_enriched[device_choice]['device']
+
+
+def flash_firmware_using_esptool(firmware_obj: Firmware, device_family_obj: DeviceFamily, baud:str, serial_port:str, erase_before_flash:bool) -> bool:
+    command = []
+
+    if device_family_obj is None or firmware_obj is None:
+        print("Must select the project, device family, and firmware to flash before flashing.")
+        return False
+
+    print("Verifying firmware list is up-to-date before downloading...")
+    if not firmware_obj.pre_flash_web_verify(brewflasher_version=__version__):
+        print("Firmware list is not up to date. Relaunch BrewFlasher and try again.")
+        return False
+
+    print("Downloading firmware...")
+    if firmware_obj.download_to_file(device_family=device_family_obj):
+        print("Downloaded successfully!\n")
+    else:
+        print("Error - unable to download firmware.\n")
+        return False
+
+    if device_family_obj.name == "ESP32" or device_family_obj.name == "ESP32-S2" or \
+            device_family_obj.name == "ESP32-C3":
+        if device_family_obj.name == "ESP32":
+            # This command matches the ESP32 flash options JSON from BrewFlasher.com
+            command_extension = ["--chip", "esp32",
+                                 "--baud", str(baud),
+                                 "--before", "default_reset", "--after", "hard_reset",
+                                 "write_flash", "0x10000",
+                                 firmware_obj.full_filepath("firmware")]
+        elif device_family_obj.name == "ESP32-S2":
+            # This command matches the ESP32-S2 flash options JSON from BrewFlasher.com
+            command_extension = ["--chip", "esp32s2",
+                                 "--baud", str(baud),
+                                 "--before", "default_reset", "--after", "hard_reset",
+                                 "write_flash", "-z", "--flash_mode", "dio", "--flash_freq", "80m",
+                                 "0x10000",
+                                 firmware_obj.full_filepath("firmware")]
+        elif device_family_obj.name == "ESP32-C3":
+            # This command matches the ESP32-C3 flash options JSON from BrewFlasher.com
+            command_extension = ["--chip", "esp32c3",
+                                 "--baud", str(baud),
+                                 "--before", "default_reset", "--after", "hard_reset",
+                                 "write_flash", "-z", "--flash_mode", "dio", "--flash_freq", "80m",
+                                 "0x10000",
+                                 firmware_obj.full_filepath("firmware")]
+        else:
+            print("Invalid device family detected. Relaunch BrewFlasher and try again.")
+            return False
+
+        # For the ESP32, we can flash a custom partition table if we need it. If this firmware template involves
+        # flashing a partition table, lets add that to the flash request
+        if len(firmware_obj.download_url_partitions) > 0 and len(
+                firmware_obj.checksum_partitions) > 0:
+            command_extension.append("0x8000")
+            command_extension.append(firmware_obj.full_filepath("partitions"))
+
+        # For now, I'm assuming bootloader flashing is ESP32 only
+        if len(device_family_obj.download_url_bootloader) > 0 and \
+                len(device_family_obj.checksum_bootloader) > 0:
+            if device_family_obj.name == "ESP32-C3":
+                command_extension.append("0x0")
+            else:
+                command_extension.append("0x1000")
+            command_extension.append(firmware_obj.full_filepath("bootloader"))
+
+    elif device_family_obj.name == "ESP8266":
+        command_extension = ["--chip", "esp8266",
+                             "write_flash",
+                             # "--flash_mode", self._config.mode,
+                             "0x00000",
+                             firmware_obj.full_filepath("firmware")]
+    else:
+        print("Invalid device family detected. Relaunch BrewFlasher and try again.")
+        return False
+
+    # For both ESP32 and ESP8266 we can directly flash an image to SPIFFS/LittleFS
+    if len(firmware_obj.download_url_spiffs) > 0 and \
+            len(firmware_obj.checksum_spiffs) > 0 and \
+            len(firmware_obj.spiffs_address) > 2:
+        # We need to flash SPIFFS. The location is dependent on the partition scheme
+        command_extension.append(firmware_obj.spiffs_address)
+        command_extension.append(firmware_obj.full_filepath("spiffs"))
+
+    # For both ESP32 and ESP8266 we can directly flash an image to the otadata section
+    if len(device_family_obj.download_url_otadata) > 0 and \
+            len(device_family_obj.checksum_otadata) > 0 and \
+            len(device_family_obj.otadata_address) > 2:
+        # We need to flash the otadata section. The location is dependent on the partition scheme
+        command_extension.append(device_family_obj.otadata_address)
+        command_extension.append(firmware_obj.full_filepath("otadata"))
+
+    command.append("--port")
+    command.append(serial_port)
+
+    command.extend(command_extension)
+
+    if erase_before_flash:
+        command.append("--erase-all")
+
+    # There is a breaking change in esptool 3.0 that changes the flash size from detect to keep. We want to
+    # support "detect" by default.
+    command.append("-fs")
+    command.append("detect")
+
+    # For certain devices (such as the ESP32-S2) there is a requirement that we open a brief connection to the
+    # controller at 1200bps to signal to the controller that it should set itself into a flashable state. We do
+    # this using basic pyserial, as esptool doesn't have this functionality built in.
+    if device_family_obj.use_1200_bps_touch:
+        try:
+            sleep(0.1)
+            print("Performing 1200 bps touch")
+            sleep(0.1)
+            ser = serial.Serial(serial_port, baudrate=1200, timeout=5, write_timeout=0)
+            sleep(1.5)
+            print("...done\n")
+            ser.close()
+        except SerialException as e:
+            # sleep(0.1)
+            # self._parent.report_error(e.strerror)
+            sleep(0.1)
+            print("...unable to perform 1200bps touch.")
+
+            print("")
+            print("Make sure you have selected the correct serial port and try again.")
+            print("")
+            print("Alternatively, you may need to manually set the device into 'flash' mode.")
+            print("")
+            print("For instructions on how to do this, check this website:\nhttp://www.brewflasher.com/manualflash/")
+            raise e
+
+    print("Esptool command: esptool.py %s\n" % " ".join(command))
+
+    try:
+        esptool.main(command)
+    except SerialException as e:
+        sleep(0.1)
+        raise e
+    except Exception as e:
+        sleep(0.1)
+        print("Firmware flashing FAILED. esptool.py raised an error.")
+        print("")
+        print("Try flashing again, or try flashing with a slower speed.")
+        print("")
+        if device_family_obj.use_1200_bps_touch:
+            print("")
+            print("Alternatively, you may need to manually set the device into 'flash' mode.")
+            print("")
+            print("For instructions on how to do this, check this website:\nhttp://www.brewflasher.com/manualflash/")
+        # sleep(0.1)
+        # sentry_sdk.capture_exception(e)
+        return False
+
+    # The last line printed by esptool is "Staying in bootloader." -> some indication that the process is
+    # done is needed
+    print("")
+    print("Firmware successfully flashed. Reset device to switch back to normal boot mode.")
 
 
 if __name__ == "__main__":
