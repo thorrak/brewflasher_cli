@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import subprocess
 import sys
 from time import sleep
 
@@ -60,24 +61,28 @@ def main(firmware, serial_port, baud, erase_flash):
             print("Please check the avrdude documentation (https://github.com/avrdudes/avrdude/) for your operating system and install it.")
             print("Exiting.")
             sys.exit(1)
-
-    if baud is None:
-        selected_baud_rate = select_baud_rate()
+        erase_flash_flag = False  # We don't need to erase flash if we're flashing with avrdude
+        selected_baud_rate = 115200
     else:
-        selected_baud_rate = baud
+        # We only need to set selected_baud_rate & erase_flash if we're flashing with esptool
 
-    # If the user set whether to erase the flash on the command line, respect his/her selection
-    if erase_flash is None:
-        confirmation = input(f"Do you want to erase the flash on the device completely before writing the firmware (y/n): ").strip().lower()
-
-        if confirmation not in ["y", "yes"]:
-            erase_flash_flag = False
-            print("Flash will not be erased before writing firmware")
+        if baud is None:
+            selected_baud_rate = select_baud_rate()
         else:
-            erase_flash_flag = True
-            print("Flash WILL be erased before writing firmware")
-    else:
-        erase_flash_flag = erase_flash
+            selected_baud_rate = baud
+
+        # If the user set whether to erase the flash on the command line, respect his/her selection
+        if erase_flash is None:
+            confirmation = input(f"Do you want to erase the flash on the device completely before writing the firmware (y/n): ").strip().lower()
+
+            if confirmation not in ["y", "yes"]:
+                erase_flash_flag = False
+                print("Flash will not be erased before writing firmware")
+            else:
+                erase_flash_flag = True
+                print("Flash WILL be erased before writing firmware")
+        else:
+            erase_flash_flag = erase_flash
 
     if erase_flash_flag:  # Set the text for the confirmation prompt below
         erase_flash_text = "erasing flash first"
@@ -107,8 +112,8 @@ def main(firmware, serial_port, baud, erase_flash):
         print("Done! Exiting.")
         sys.exit(0)
     elif device_family.flash_method == "avrdude":
-        print("TODO - Flash with avrdude here")
-        sys.exit(1)  # TODO - Change to 0 when implemented
+        flash_firmware_using_avrdude(selected_firmware, device_family, selected_device)
+        sys.exit(0)
     else:
         print(f"Unknown flash method {device_family.flash_method}. Exiting.")
         sys.exit(1)
@@ -351,6 +356,102 @@ def flash_firmware_using_esptool(firmware_obj: Firmware, device_family_obj: Devi
     except Exception as e:
         sleep(0.1)
         print("Firmware flashing FAILED. esptool.py raised an error.")
+        print("")
+        print("Try flashing again, or try flashing with a slower speed.")
+        print("")
+        if device_family_obj.use_1200_bps_touch:
+            print("")
+            print("Alternatively, you may need to manually set the device into 'flash' mode.")
+            print("")
+            print("For instructions on how to do this, check this website:\nhttp://www.brewflasher.com/manualflash/")
+        # sleep(0.1)
+        # sentry_sdk.capture_exception(e)
+        return False
+
+    # The last line printed by esptool is "Staying in bootloader." -> some indication that the process is
+    # done is needed
+    print("")
+    print("Firmware successfully flashed. Reset device to switch back to normal boot mode.")
+
+
+def flash_firmware_using_avrdude(firmware_obj: Firmware, device_family_obj: DeviceFamily, serial_port:str) -> bool:
+    command = []
+
+    if device_family_obj is None or firmware_obj is None:
+        print("Must select the project, device family, and firmware to flash before flashing.")
+        return False
+
+    if device_family_obj.flash_method != "avrdude":
+        raise ValueError("This device family does not support avrdude flashing -- this is likely a programming error.")
+
+    print("Verifying firmware list is up-to-date before downloading...")
+    if not firmware_obj.pre_flash_web_verify(brewflasher_version=__version__):
+        print("Firmware list is not up to date. Relaunch BrewFlasher and try again.")
+        return False
+
+    print("Downloading firmware...")
+    if firmware_obj.download_to_file(device_family=device_family_obj):
+        print("Downloaded successfully!\n")
+    else:
+        print("Error - unable to download firmware.\n")
+        return False
+
+    # ["-p", "atmega328p", "-c", "arduino", "-P", "{serial_port}", "-D", "-U", "flash:w:{firmware_path}:i"]
+
+    command.append("-p")
+    command.append("atmega328p")
+
+    command.append("-c")
+    command.append("arduino")
+
+    command.append("-P")
+    command.append(serial_port)
+
+    # command.append("-b")
+    # command.append(baud)
+
+    command.append("-D")  # Disable auto erase - May want to make this configurable in the future
+
+    command.append("-U")
+    command.append(f"flash:w:{firmware_obj.full_filepath('firmware')}:i")
+
+    #
+    # # For certain devices (such as the ESP32-S2) there is a requirement that we open a brief connection to the
+    # # controller at 1200bps to signal to the controller that it should set itself into a flashable state. We do
+    # # this using basic pyserial, as esptool doesn't have this functionality built in.
+    # if device_family_obj.use_1200_bps_touch:
+    #     try:
+    #         sleep(0.1)
+    #         print("Performing 1200 bps touch")
+    #         sleep(0.1)
+    #         ser = serial.Serial(serial_port, baudrate=1200, timeout=5, write_timeout=0)
+    #         sleep(1.5)
+    #         print("...done\n")
+    #         ser.close()
+    #     except SerialException as e:
+    #         # sleep(0.1)
+    #         # self._parent.report_error(e.strerror)
+    #         sleep(0.1)
+    #         print("...unable to perform 1200bps touch.")
+    #
+    #         print("")
+    #         print("Make sure you have selected the correct serial port and try again.")
+    #         print("")
+    #         print("Alternatively, you may need to manually set the device into 'flash' mode.")
+    #         print("")
+    #         print("For instructions on how to do this, check this website:\nhttp://www.brewflasher.com/manualflash/")
+    #         raise e
+
+    print("Avrdude command: avrdude %s\n" % " ".join(command))
+
+    try:
+        subprocess.run(command)
+    except SerialException as e:
+        sleep(0.1)
+        raise e
+    except Exception as e:
+        sleep(0.1)
+        print("Firmware flashing FAILED. avrdude raised an error.")
         print("")
         print("Try flashing again, or try flashing with a slower speed.")
         print("")
