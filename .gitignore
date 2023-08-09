@@ -288,5 +288,5 @@ cython_debug/
 
 
 # Downloaded firmware
-.bin
+*.bin
 
