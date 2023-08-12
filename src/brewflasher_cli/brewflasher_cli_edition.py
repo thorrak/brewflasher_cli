@@ -30,7 +30,12 @@ def obtain_user_confirmation(prompt: str):
 @click.option('--baud', '-b', default=None, help='Baud rate to flash at',
               type=click.Choice([str(x) for x in __supported_baud_rates__]))
 @click.option('--erase-flash', '-e', is_flag=True, default=None, help='Erase flash memory before installing firmware')
-def main(firmware, serial_port, baud, erase_flash):
+@click.option('--dont-erase-flash', '-n', is_flag=True, default=None, help='Don\'t erase flash memory before installing firmware')
+def main(firmware, serial_port, baud, erase_flash, dont_erase_flash):
+    if erase_flash and dont_erase_flash:
+        print("You can't specify both --erase-flash and --dont-erase-flash. Exiting.")
+        sys.exit(1)
+
     # Initialize the firmware list
     print("Loading firmware list from BrewFlasher.com...")
     firmware_list = FirmwareList()
@@ -74,7 +79,7 @@ def main(firmware, serial_port, baud, erase_flash):
             selected_baud_rate = baud
 
         # If the user set whether to erase the flash on the command line, respect his/her selection
-        if erase_flash is None:
+        if erase_flash is None and dont_erase_flash is None:
             confirmation = input(f"Do you want to erase the flash on the device completely before writing the firmware (y/n): ").strip().lower()
 
             if confirmation not in ["y", "yes"]:
@@ -84,7 +89,13 @@ def main(firmware, serial_port, baud, erase_flash):
                 erase_flash_flag = True
                 print("Flash WILL be erased before writing firmware")
         else:
-            erase_flash_flag = erase_flash
+            if erase_flash is not None:
+                erase_flash_flag = erase_flash
+            elif dont_erase_flash is not None:
+                erase_flash_flag = not dont_erase_flash
+            else:
+                print("This should never happen. Please report this error to the BrewFlasher developers. (erase_flash_flag)")
+                sys.exit(1)
 
     if erase_flash_flag:  # Set the text for the confirmation prompt below
         erase_flash_text = "erasing flash first"
