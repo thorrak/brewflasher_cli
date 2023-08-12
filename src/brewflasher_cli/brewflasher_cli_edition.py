@@ -24,6 +24,7 @@ def obtain_user_confirmation(prompt: str):
 
 
 @click.command()
+@click.version_option(__version__)
 @click.option('--firmware', '-f', default=None, help='Firmware ID to skip firmware selection')
 @click.option('--serial-port', '-p', default=None, help='Serial port to skip device detection')
 @click.option('--baud', '-b', default=None, help='Baud rate to flash at',
@@ -62,7 +63,7 @@ def main(firmware, serial_port, baud, erase_flash):
             print("Please check the avrdude documentation (https://github.com/avrdudes/avrdude/) for your operating system and install it.")
             print("Exiting.")
             sys.exit(1)
-        erase_flash_flag = False  # We don't need to erase flash if we're flashing with avrdude
+        erase_flash_flag = True  # Avrdude currently always erases flash
         selected_baud_rate = 115200
     else:
         # We only need to set selected_baud_rate & erase_flash if we're flashing with esptool
@@ -170,19 +171,19 @@ def select_baud_rate() -> int:
 
 def detect_new_devices():
     # Prompt user to disconnect the device
-    input("\nPlease disconnect the device (if it is connected), then press Enter...")
+    input("\nPlease disconnect the device to flash (if it is connected), then press Enter...")
 
     # Cache the list of currently available serial devices
     serial_integration.cache_current_devices()
 
     # Prompt user to connect the device
-    input("Please connect the device, then press Enter...")
+    input("Please connect the device to flash, then press Enter...")
 
     # Compare the current list of serial devices against the cached list
     _, _, new_devices, new_devices_enriched = serial_integration.compare_current_devices_against_cache()
 
     if not new_devices:
-        print("No new devices detected.")
+        print("No new devices detected. Please reattempt detection, or specify the device using the --serial-port flag on the command line.")
         return None
     else:
         print("\nNew devices detected:")
