@@ -107,7 +107,7 @@ def main(firmware, serial_port, baud, erase_flash):
 
     obtain_user_confirmation(f"Do you want to flash device {selected_device} with {selected_firmware}?")
 
-    flash_firmware_using_whatever_is_appropriate(selected_firmware, device_family, selected_baud_rate, selected_device, erase_flash_flag)
+    flash_firmware_using_whatever_is_appropriate(selected_firmware, selected_baud_rate, selected_device, erase_flash_flag)
     print("Done! Exiting.")
     sys.exit(0)
 
@@ -210,9 +210,9 @@ def detect_new_devices():
         return new_devices_enriched[device_choice]['device']
 
 
-def flash_firmware_using_whatever_is_appropriate(firmware_obj: Firmware, device_family_obj: DeviceFamily, baud:str, serial_port:str, erase_before_flash:bool) -> bool:
+def flash_firmware_using_whatever_is_appropriate(firmware_obj: Firmware, baud:str, serial_port:str, erase_before_flash:bool) -> bool:
     # Initial checks
-    if device_family_obj is None or firmware_obj is None:
+    if firmware_obj.family is None or firmware_obj is None:
         print("Must select the project, device family, and firmware to flash before flashing.")
         return False
 
@@ -222,14 +222,14 @@ def flash_firmware_using_whatever_is_appropriate(firmware_obj: Firmware, device_
         return False
 
     print("Downloading firmware...")
-    if not firmware_obj.download_to_file(device_family=device_family_obj):
+    if not firmware_obj.download_to_file():
         print("Error - unable to download firmware.\n")
         return False
     print("Downloaded successfully!\n")
 
     if firmware_obj.family.flash_method == "esptool":
         # Construct the command based on device family
-        device_name = device_family_obj.name
+        device_name = firmware_obj.family.name
         command_extension = []
 
         if device_name in ["ESP32", "ESP32-S2", "ESP32-C3"]:
@@ -246,7 +246,7 @@ def flash_firmware_using_whatever_is_appropriate(firmware_obj: Firmware, device_
             if firmware_obj.download_url_partitions and firmware_obj.checksum_partitions:
                 command_extension.extend(["0x8000", firmware_obj.full_filepath("partitions")])
 
-            if device_family_obj.download_url_bootloader and device_family_obj.checksum_bootloader:
+            if firmware_obj.family.download_url_bootloader and firmware_obj.family.checksum_bootloader:
                 boot_address = "0x0" if device_name == "ESP32-C3" else "0x1000"
                 command_extension.extend([boot_address, firmware_obj.full_filepath("bootloader")])
 
@@ -262,10 +262,10 @@ def flash_firmware_using_whatever_is_appropriate(firmware_obj: Firmware, device_
             command_extension.append(firmware_obj.spiffs_address)
             command_extension.append(firmware_obj.full_filepath("spiffs"))
 
-        if (device_family_obj.download_url_otadata and device_family_obj.checksum_otadata and
-                len(device_family_obj.otadata_address) > 2):
+        if (firmware_obj.family.download_url_otadata and firmware_obj.family.checksum_otadata and
+                len(firmware_obj.family.otadata_address) > 2):
             # We need to flash the otadata section. The location is dependent on the partition scheme
-            command_extension.append(device_family_obj.otadata_address)
+            command_extension.append(firmware_obj.family.otadata_address)
             command_extension.append(firmware_obj.full_filepath("otadata"))
 
         # Construct the main command
@@ -278,7 +278,7 @@ def flash_firmware_using_whatever_is_appropriate(firmware_obj: Firmware, device_
         command.extend(["-fs", "detect"])
 
         # Handle 1200 bps touch for certain devices
-        if device_family_obj.use_1200_bps_touch:
+        if firmware_obj.family.use_1200_bps_touch:
             try:
                 sleep(0.1)
                 print("Performing 1200 bps touch")
@@ -323,7 +323,7 @@ def flash_firmware_using_whatever_is_appropriate(firmware_obj: Firmware, device_
         print("")
         print("Try flashing again, or try flashing with a slower speed.")
         print("")
-        if device_family_obj.use_1200_bps_touch:
+        if firmware_obj.family.use_1200_bps_touch:
             print("")
             print("Alternatively, you may need to manually set the device into 'flash' mode.")
             print("")
