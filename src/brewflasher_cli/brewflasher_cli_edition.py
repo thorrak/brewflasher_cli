@@ -9,8 +9,8 @@ import esptool
 import serial
 from serial import SerialException
 
-from .brewflasher_com_integration import FirmwareList, Firmware
-from . import serial_integration
+from brewflasher_cli.brewflasher_com_integration import FirmwareList, Firmware
+from brewflasher_cli import serial_integration
 
 __version__ = "0.0.1"
 __supported_baud_rates__ = [9600, 57600, 74880, 115200, 230400, 460800, 921600]
