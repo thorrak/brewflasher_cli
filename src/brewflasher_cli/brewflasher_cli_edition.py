@@ -121,6 +121,7 @@ def main(firmware, serial_port, baud, erase_flash, dont_erase_flash):
     obtain_user_confirmation(f"Do you want to flash device {selected_device} with {selected_firmware}?")
 
     flash_firmware_using_whatever_is_appropriate(selected_firmware, selected_baud_rate, selected_device, erase_flash_flag)
+    selected_firmware.remove_downloaded_firmware()  # Clean up the downloaded firmware files
     print("Done! Exiting.")
     sys.exit(0)
 

@@ -168,6 +168,15 @@ class Firmware:
                 return True
         return False
 
+    def remove_downloaded_firmware(self):
+        """Delete the downloaded firmware files"""
+
+        firmware_types = ["bootloader", "firmware", "partitions", "spiffs", "otadata"]
+
+        for firmware_type in firmware_types:
+            if os.path.exists(self.full_filepath(firmware_type)):
+                os.remove(self.full_filepath(firmware_type))
+
 
 @dataclass
 class FirmwareList:
