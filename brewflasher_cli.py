@@ -277,21 +277,6 @@ def flash_firmware_using_whatever_is_appropriate(firmware_obj: Firmware, baud:st
         # support "detect" by default.
         command.extend(["-fs", "detect"])
 
-        # Handle 1200 bps touch for certain devices
-        if firmware_obj.family.use_1200_bps_touch:
-            try:
-                sleep(0.1)
-                print("Performing 1200 bps touch")
-                with serial.Serial(serial_port, baudrate=1200, timeout=5, write_timeout=0) as ser:
-                    sleep(1.5)
-                    print("...done\n")
-            except SerialException as e:
-                sleep(0.1)
-                print("\nUnable to perform 1200bps touch.")
-                print("Ensure correct serial port and try again or set device into 'flash' mode manually.")
-                print("Instructions: http://www.brewflasher.com/manualflash/")
-                raise e
-
         print(f"Esptool command: esptool.py {' '.join(command)}\n")
 
     elif firmware_obj.family.flash_method == "avrdude":
@@ -308,6 +293,21 @@ def flash_firmware_using_whatever_is_appropriate(firmware_obj: Firmware, baud:st
 
     else:
         raise ValueError("Invalid flash method detected. Update BrewFlasher and try again.")
+
+    # Handle 1200 bps touch for certain devices
+    if firmware_obj.family.use_1200_bps_touch:
+        try:
+            sleep(0.1)
+            print("Performing 1200 bps touch")
+            with serial.Serial(serial_port, baudrate=1200, timeout=5, write_timeout=0) as ser:
+                sleep(1.5)
+                print("...done\n")
+        except SerialException as e:
+            sleep(0.1)
+            print("\nUnable to perform 1200bps touch.")
+            print("Ensure correct serial port and try again or set device into 'flash' mode manually.")
+            print("Instructions: http://www.brewflasher.com/manualflash/")
+            raise e
 
     try:
         if firmware_obj.family.flash_method == "esptool":
