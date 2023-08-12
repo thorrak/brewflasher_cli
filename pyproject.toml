@@ -22,4 +22,4 @@ classifiers = [
 "Bug Tracker" = "https://github.com/thorrak/brewflasher_cli/issues"
 
 [project.scripts]
-brewflasher = "brewflasher_cli.brewflasher:main"
+brewflasher = "brewflasher_cli.brewflasher_cli:main"
