@@ -32,8 +32,6 @@ def obtain_user_confirmation(prompt: str):
 def main(firmware, serial_port, baud, erase_flash):
     # Initialize the firmware list
     print("Loading firmware list from BrewFlasher.com...")
-    print("Success!")
-    exit(0)
     firmware_list = FirmwareList()
     if not firmware_list.load_from_website(load_esptool_only=False):
         print("Failed to load data from the website.")
