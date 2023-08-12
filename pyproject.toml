@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61.0", "requests>=2.31.0", "pyserial>=3.5", "click>=8.1.6", "esptool>=4.6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "brewflasher_cli"
+version = "0.0.1"
+authors = [
+  { name="John Beeler", email="author@example.com" },
+]
+description = "BrewFlasher Command Line Tool"
+readme = "README.md"
+requires-python = ">=3.6"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/thorrak/brewflasher_cli"
+"Bug Tracker" = "https://github.com/thorrak/brewflasher_cli/issues"
+
+[project.scripts]
+brewflasher = "brewflasher_cli.brewflasher:main"
