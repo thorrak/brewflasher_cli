@@ -214,7 +214,7 @@ def flash_firmware_using_whatever_is_appropriate(firmware_obj: Firmware, baud:st
         return False
 
     print("Verifying firmware list is up-to-date before downloading...")
-    if not firmware_obj.pre_flash_web_verify(brewflasher_version=__version__):
+    if not firmware_obj.pre_flash_web_verify(brewflasher_version=__version__, flasher="BrewFlasher CLI"):
         print("Firmware list is not up to date. Relaunch BrewFlasher and try again.")
         return False
 

@@ -153,11 +153,11 @@ class Firmware:
         return self.download_file(self.full_filepath("firmware"), self.download_url, self.checksum, check_checksum,
                                   force_download)
 
-    def pre_flash_web_verify(self, brewflasher_version):
+    def pre_flash_web_verify(self, brewflasher_version, flasher="BrewFlasher"):
         """Recheck that the checksum we have cached is still the one that brewflasher.com reports"""
         request_dict = {
             'firmware_id': self.id,
-            'flasher': "BrewFlasher",
+            'flasher': flasher,
             'flasher_version': brewflasher_version
         }
         url = BREWFLASHER_COM_URL + "/api/flash_verify/"
