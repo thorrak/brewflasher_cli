@@ -2,6 +2,7 @@
 import subprocess
 import sys
 from time import sleep
+from shutil import which
 
 import esptool
 import serial
@@ -146,29 +147,12 @@ def select_firmware(firmware_list):
 
 
 def check_for_avrdude() -> bool:
-    from shutil import which
-
-    if which("avrdude") is not None:
+    if which("avrdude") is not None or which("avrdude.exe") is not None:
         print("avrdude found on the path - Arduino installations can proceed.")
         return True
     else:
         print("avrdude not found on the path - Cannot flash Arduino firmware!")
         return False
-
-    # # Test if avrdude is available. If not, the user will need to install it.
-    # try:
-    #     rettext = subprocess.check_output(["dpkg", "-s", "avrdude"]).decode(encoding='cp437')
-    #     install_check = rettext.find("installed")
-    #
-    #     if install_check == -1:
-    #         # The package status isn't 'installed'
-    #         print("Warning - Package 'avrdude' not installed. Arduino installations will fail! Click <a href=\"http://www.fermentrack.com/help/avrdude/\">here</a> to learn how to resolve this issue.")
-    #         return False
-    #     else:
-    #         return True
-    # except:
-    #     print("Unable to check for installed 'avrdude' package - Arduino installations may fail!")
-    #     return False
 
 
 def select_baud_rate() -> int:
