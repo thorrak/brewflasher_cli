@@ -4,7 +4,7 @@ from typing import Dict, List
 import requests
 import copy
 import sys
-import fhash
+from . import fhash
 
 
 BREWFLASHER_COM_URL = "https://www.brewflasher.com/firmware"
