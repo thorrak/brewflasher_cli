@@ -18,7 +18,7 @@ There are currently three editions of BrewFlasher to choose from:
 
 BrewFlasher CLI is available on PyPi and can be installed using pip:
 
-    pip install brewflasher_cli
+    pip install --upgrade brewflasher_cli
 
 
 ## Usage
